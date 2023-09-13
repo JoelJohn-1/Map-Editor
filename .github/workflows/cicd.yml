@@ -1,0 +1,117 @@
+# Order Backend -> Frontend
+name: CI/CD
+env: 
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_PROJECT_ID: ${{ secrets.PROJECT_TOKEN }}
+  WORKFLOW_PATH: ${{ github.workspace }}
+on:
+  push:
+    branches: 
+      - main
+jobs:
+  jest-supertest:
+      runs-on: ubuntu-latest
+      steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: '16.x'
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm install
+      - name: Testing
+        working-directory: ./backend
+        run: npm test
+  backend-deploy:
+      needs: jest-supertest
+      runs-on: ubuntu-latest
+      steps:
+      - name: Deploy using ssh
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: 22
+          script: |
+            cd ~/416/project/backend
+            pm2 stop backend
+            cd ~/416/project
+            git checkout ${GITHUB_REF##*/}
+            git reset --hard origin
+            git clean -fd
+            git pull origin
+            git status
+            cd ~/416/project/backend
+            npm install 
+            pm2 restart backend 
+
+#####################  Vercel Deployment #####################
+  vercel-deployment:
+    needs: backend-deploy
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=preview --token=${{ secrets.ACCOUNT_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.ACCOUNT_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.ACCOUNT_TOKEN }}
+
+
+  ##################### Frontend Test #####################
+  cypress:
+    needs: vercel-deployment
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      
+#####################  Cypress Test Cases #####################
+      - name: Cypress run
+        uses: cypress-io/github-action@v5
+        with:
+          component: false
+          working-directory: ./frontend
+          browser: chrome
+          headed: true
+
+      - name: Upload videos of failed test cases (if any)
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: cypress-failed-videos
+          path: ${{ env.WORKFLOW_PATH }}/frontend/cypress/videos/
+          if-no-files-found: warn
+          Warning: No videos were found
+
+      - name: Upload screenshots of failed test cases (if any)
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: cypress-failed-screenshots
+          path: ${{ env.WORKFLOW_PATH }}/frontend/cypress/screenshots/
+          if-no-files-found: warn
+
+      - name: Upload videos of success test cases (if any)
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: cypress-success-videos
+          path: ${{ env.WORKFLOW_PATH }}/frontend/cypress/videos/
+          if-no-files-found: warn
+
+      - name: Upload screenshots of success test cases (if any)
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: cypress-success-screenshots
+          path: ${{ env.WORKFLOW_PATH }}/frontend/cypress/screenshots/
+          if-no-files-found: warn

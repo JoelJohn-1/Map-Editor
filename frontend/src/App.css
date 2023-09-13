@@ -1,0 +1,13 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #0B0B0F;
+}
+
+.leaflet-vertex-icon {
+    border-radius: 10px;
+}
+
+.gif {
+    max-width: 100%;
+}

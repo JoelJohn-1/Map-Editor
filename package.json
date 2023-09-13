@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@turf/turf": "^6.5.0",
+    "react-select": "^5.7.3"
+  }
+}
